@@ -1,0 +1,5 @@
+hw_01_log_analyzer/log/*
+hw_01_log_analyzer/reports/
+
+venv/
+__pycache__
