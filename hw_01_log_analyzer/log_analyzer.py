@@ -40,13 +40,14 @@ def detect_last_log_file(log_dir, report_dir):
     log_files = glob.glob(os.path.join(log_dir, "nginx-access-ui.log-*"))
 
     for log_file in log_files:
-        if not check_log_filename(os.path.basename(log_file)):
+        try:
+            log_date = get_date_from_filename(log_file)
+        except ValueError:
             log_files.remove(log_file)
-            print("remove %r" % log_file)
-        log_date = get_date_from_filename(log_file)
-        if os.path.isfile(os.path.join(report_dir, "report-%s.%s.%s.html" % log_date)):
+            continue
+        if not check_log_filename(os.path.basename(log_file)) or \
+                os.path.isfile(os.path.join(report_dir, "report-%s.%s.%s.html" % log_date)):
             log_files.remove(log_file)
-            print("remove %r" % log_file)
 
     if not log_files:
         raise DoneException("Dir %s is empty or not contains log files with valid names or all logs files were "
