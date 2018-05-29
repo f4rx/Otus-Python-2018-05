@@ -11,6 +11,7 @@ import yaml
 import logging
 import logging.handlers
 from string import Template
+import sys
 
 
 global_config = {
@@ -191,7 +192,36 @@ def config_logger(filename):
     log_format = '[%(asctime)s] %(levelname).1s: %(message)s'
     log_date_format = "%Y-%m-%d %H:%M:%S"
     log_level = logging.INFO
-    logging.basicConfig(filename=filename, level=log_level, format=log_format, datefmt=log_date_format)
+
+    # По-умолчанию записываем в файл согласно ТЗ
+    logging.basicConfig(filename=filename,
+                        filemode='a',
+                        level=log_level,
+                        format=log_format,
+                        datefmt=log_date_format)
+
+    # Хочу дополнительно подключить stdout
+    # По-умолчанию он шлет в stderr
+    console = logging.StreamHandler(sys.stdout)
+    console.setLevel(logging.INFO)
+    console.set_name('log_analyzer')
+    formatter = logging.Formatter(fmt='%(asctime)s %(filename)-6s: %(levelname)-5s %(message)s', datefmt='%H:%M:%S')
+    console.setFormatter(formatter)
+    logging.getLogger('').addHandler(console)
+
+    # Это на случай если захочу подключить Syslog
+    """
+    syslog_address = '/dev/log'
+    if platform.system() == 'Darwin':
+        syslog_address = '/var/run/syslog'
+
+    logging.info("syslog_address is %s" % syslog_address)
+
+    logger_handler = logging.handlers.SysLogHandler(address=syslog_address)
+    formatter = logging.Formatter('%(name)s: %(levelname)s  %(message)s')
+    logger_handler.setFormatter(formatter)
+    logging.getLogger('').addHandler(logger_handler)
+    """
 
     # Example for Syslog
     # syslog_address = '/dev/log'
@@ -224,14 +254,10 @@ def main(config):
         logging.error(e)
         exit(1)
     except KeyboardInterrupt:
-        logging.exception("The script was interrupted")
-        logging.exception("The script is interrupted and data report can be corrupted")
+        logging.error("The script is interrupted and data report can be corrupted")
         exit(2)
     except BaseException:
-        # > зачем print'ы, если есть логирование?
-        # И как пользователь узнает, что нужно залезть в лог, если уберу принт ?
-        print("Critical error during execution the script, see logs")
-        traceback.print_exc()
+        logging.error("Critical error during execution the script, see logs")
         logging.exception(traceback)
         exit(3)
 
