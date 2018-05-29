@@ -10,6 +10,7 @@ import argparse
 import yaml
 import logging
 import logging.handlers
+from string import Template
 
 
 global_config = {
@@ -41,30 +42,21 @@ def detect_last_log_file(log_dir, report_dir):
     for log_file in log_files:
         if not check_log_filename(os.path.basename(log_file)):
             log_files.remove(log_file)
+            print("remove %r" % log_file)
+        log_date = get_date_from_filename(log_file)
+        if os.path.isfile(os.path.join(report_dir, "report-%s.%s.%s.html" % log_date)):
+            log_files.remove(log_file)
+            print("remove %r" % log_file)
 
     if not log_files:
-        raise FileNotFoundError("Dir %s is empty or not contains log files with valid names" % log_dir)
+        raise DoneException("Dir %s is empty or not contains log files with valid names or all logs files were "
+                            "parsered " % log_dir)
 
     # формат даты YYYYMMDD позволяет просто сортировать в лексикографическом порядке
     log_files.sort(reverse=True)
 
-    log_file_to_work = None
-    for log_file in log_files:
-        try:
-            log_date = get_date_from_filename(log_file)
-        except ValueError:
-            continue
-
-        #  Добавить поддержку md5 report, когда файл уже записался, чтобы знать, что запись файла не прирвалась
-        if not os.path.isfile(os.path.join(report_dir, "report-%s.%s.%s.html" % log_date)):
-            log_file_to_work = log_file
-            break
-
-    if not log_file_to_work:
-        raise DoneException("All logs files were parsered")
-
-    print_and_log_info("Working with file %r" % log_file_to_work)
-    return log_file_to_work
+    logging.info("Working with file %r" % log_files[0])
+    return log_files[0]
 
 
 def get_date_from_filename(filename):
@@ -91,14 +83,13 @@ def check_log_filename(filename):
 # 200 927 "-" "Lynx/2.8.8dev.9 libwww-FM/2.14 SSL-MM/1.4.1 GNUTLS/2.10.5" "-" "1498697422-2190034393-4708-9752759"
 # "dc7161be3"
 # 0.390
-def parse_log_file(filename, report_size, parse_error_perc):
+def get_statistin_from_log_file(filename, report_size, parse_error_perc):
 
     urls_rate = {}
     parse_error_count = 0   # Количество ошибок при парсинге
     request_count = 0       # Общее количество запросов
     request_time_count = 0  # Общее время на все запросы
-    read_log_file = return_read_log_file(filename)
-    for line in read_log_file(filename):
+    for line in return_read_log_file(filename):
         mo = re.search(r'\] \"\w* (.*?) HTTP.* (.*?)$', line)
         if not mo or len(mo.groups()) != 2:
             parse_error_count += 1
@@ -139,35 +130,31 @@ def count_statistic(urls_rate, request_count, request_time, report_size):
 
 def return_read_log_file(filename):
     if re.match(".*\.gz$", filename):
-        return read_log_file_gz
+        with gzip.open(filename, 'rb') as log_file:
+            for line in log_file:
+                yield line.decode()
     else:
-        return read_log_file_plain
-
-
-def read_log_file_plain(filename):
-    with open(filename) as log_file:
-        for cnt, line in enumerate(log_file):
-            yield line
-
-
-def read_log_file_gz(filename):
-    with gzip.open(filename, 'rb') as log_file:
-        for cnt, line in enumerate(log_file):
-            yield line.decode()
+        with open(filename) as log_file:
+            for line in log_file:
+                yield line
 
 
 def write_report(urls_statistic, log_filename, report_dir):
     report_date = get_date_from_filename(log_filename)
     report_filename = "report-%s.%s.%s.html" % report_date
     report_path = os.path.join(report_dir, report_filename)
-    with open(os.path.join(report_path), 'w') as report_file:
-        with open("resources/report.html.template") as template_file:
-            for cnt, line in enumerate(template_file):
-                if line == "    var table = $table_json;\n":
-                    report_file.write("    var table = %s;\n" % get_result_for_write(urls_statistic))
-                else:
-                    report_file.write(line)
-    print_and_log_info("Отчет был записан в %s" % report_path)
+    with open(report_path, 'w') as report_file:
+        with open("resources/report.html.template", 'r') as template_file:
+            template_file_raw = template_file.read()
+            report_template = Template(template_file_raw)
+            table_json = {"table_json": get_result_for_write(urls_statistic)}
+            report_file.write(report_template.safe_substitute(table_json))
+            # for line in template_file:
+            #     if line == "    var table = $table_json;\n":
+            #         report_file.write("    var table = %s;\n" % get_result_for_write(urls_statistic))
+            #     else:
+            #         report_file.write(line)
+    logging.info("Отчет был записан в %s" % report_path)
 
 
 def get_result_for_write(urls_statistic):
@@ -179,11 +166,10 @@ def get_result_for_write(urls_statistic):
     return result
 
 
-def get_config_path():
+def get_args():
     parser = argparse.ArgumentParser(description='Parse log files.')
-    parser.add_argument('-c', '--config', help='path to conf.yaml', required=True)
-    args = parser.parse_args()
-    return args.config
+    parser.add_argument('-c', '--config', help='path to conf.yaml', default='conf.yaml')
+    return parser.parse_args()
 
 
 def merge_config(default_config, file_config):
@@ -196,7 +182,8 @@ def merge_config(default_config, file_config):
             user_config = yaml.load(stream)
         except yaml.YAMLError as exc:
             raise yaml.YAMLError("Errors during reading '%s'. Please check yaml file" % file_config)
-    return {**default_config, **user_config}
+    default_config.update(user_config)
+    return default_config
 
 
 def config_logger(filename):
@@ -213,21 +200,12 @@ def config_logger(filename):
     #                     format=log_format, datefmt=log_date_format)
 
 
-def print_and_log_info(str):
-    print(str)
-    logging.info(str)
-
-
-def print_and_log_error(str):
-    print(str)
-    logging.error(str)
-
-
 def run(config):
-    config = merge_config(config, get_config_path())
+    args = get_args()
+    config = merge_config(config, args.config)
     config_logger(config['LOG_FILE'])
     log_file = detect_last_log_file(config['LOG_DIR'], config['REPORT_DIR'])
-    urls_statistic = parse_log_file(log_file, config['REPORT_SIZE'], config['PARSE_ERROR_PERC'])
+    urls_statistic = get_statistin_from_log_file(log_file, config['REPORT_SIZE'], config['PARSE_ERROR_PERC'])
     write_report(urls_statistic, log_file, config['REPORT_DIR'])
 
 
@@ -237,20 +215,22 @@ def main(config):
     # https://docs.python.org/2/howto/doanddont.html#exceptions
     try:
         run(config)
-    except DoneException as e:
-        print_and_log_info(e)
     except SystemExit:
         pass
+    except DoneException as e:
+        logging.info(e)
     except (FileNotFoundError, NotADirectoryError, yaml.YAMLError, ParseException) as e:
-        print(e)
         logging.error(e)
         exit(1)
     except KeyboardInterrupt:
         logging.exception("The script was interrupted")
-        print("The script is interrupted and data report can be corrupted")
+        logging.exception("The script is interrupted and data report can be corrupted")
         exit(2)
     except BaseException:
+        # > зачем print'ы, если есть логирование?
+        # И как пользователь узнает, что нужно залезть в лог, если уберу принт ?
         print("Critical error during execution the script, see logs")
+        traceback.print_exc()
         logging.exception(traceback)
         exit(3)
 

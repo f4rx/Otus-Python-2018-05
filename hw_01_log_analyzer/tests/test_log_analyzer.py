@@ -51,7 +51,7 @@ class LogAnalyzerTest(unittest.TestCase):
                 self.assertEqual(log_analyzer.detect_last_log_file("fake_dir1", "fake_dir2"),
                                  "nginx-access-ui.log-20170631.gz")
                 glob_mock.return_value = []
-                with self.assertRaises(FileNotFoundError):
+                with self.assertRaises(log_analyzer.DoneException):
                     log_analyzer.detect_last_log_file("fake_dir1", "fake_dir2")
 
     def test_merge_config(self):
@@ -69,12 +69,12 @@ class LogAnalyzerTest(unittest.TestCase):
 
         self.assertEqual(log_analyzer.merge_config({1: 1, 2: 2}, "conf/conf3.yaml"), {1: 1, 2: 2, 4: 4})
 
-    def test_parse_log_file(self):
-        self.assertEqual(log_analyzer.parse_log_file("log2/1.log", 1, 1.0), {'/api/v2/banner/25019354': {'count': 2,
+    def test_get_statistin_from_log_file(self):
+        self.assertEqual(log_analyzer.get_statistin_from_log_file("log2/1.log", 1, 1.0), {'/api/v2/banner/25019354': {'count': 2,
                                         'count_perc': 40.0, 'time_avg': 5.768, 'time_max': 6.146, 'time_med': 5.768,
                                          'time_perc': 91.759, 'time_sum': 11.536}})
 
-        self.assertEqual(log_analyzer.parse_log_file("log2/2.log", 1, 1.0), {})
+        self.assertEqual(log_analyzer.get_statistin_from_log_file("log2/2.log", 1, 1.0), {})
 
 
 if __name__ == '__main__':
