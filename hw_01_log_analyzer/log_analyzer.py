@@ -226,7 +226,6 @@ def print_and_log_error(str):
 def run(config):
     config = merge_config(config, get_config_path())
     config_logger(config['LOG_FILE'])
-    logging.info("CONFIG: %r" % config)
     log_file = detect_last_log_file(config['LOG_DIR'], config['REPORT_DIR'])
     urls_statistic = parse_log_file(log_file, config['REPORT_SIZE'], config['PARSE_ERROR_PERC'])
     write_report(urls_statistic, log_file, config['REPORT_DIR'])
