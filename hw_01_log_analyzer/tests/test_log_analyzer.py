@@ -51,8 +51,9 @@ class LogAnalyzerTest(unittest.TestCase):
                 self.assertEqual(log_analyzer.detect_last_log_file("fake_dir1", "fake_dir2"),
                                  "nginx-access-ui.log-20170631.gz")
                 glob_mock.return_value = []
-                with self.assertRaises(log_analyzer.DoneException):
-                    log_analyzer.detect_last_log_file("fake_dir1", "fake_dir2")
+                self.assertEqual(log_analyzer.detect_last_log_file("fake_dir1", "fake_dir2"), None)
+                # with self.assertRaises(log_analyzer.DoneException):
+                #     log_analyzer.detect_last_log_file("fake_dir1", "fake_dir2")
 
     def test_merge_config(self):
         """

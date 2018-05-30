@@ -14,7 +14,7 @@ from string import Template
 import sys
 
 
-global_config = {
+DEFAULT_CONFIG = {
     "REPORT_SIZE": 1000,
     "REPORT_DIR": "./reports",
     "LOG_DIR": "./log",
@@ -23,17 +23,10 @@ global_config = {
 }
 
 
-class DoneException(Exception):
-    pass
-
-
-class ParseException(Exception):
-    pass
-
-
 def detect_last_log_file(log_dir, report_dir):
     if not os.path.isdir(log_dir):
-        raise NotADirectoryError("Log dir '%s' not found" % log_dir)
+        logging.info("Log dir '%s' not found" % log_dir)
+        return
 
     if not os.path.isdir(report_dir):
         os.mkdir(report_dir)
@@ -51,8 +44,9 @@ def detect_last_log_file(log_dir, report_dir):
             log_files.remove(log_file)
 
     if not log_files:
-        raise DoneException("Dir %s is empty or not contains log files with valid names or all logs files were "
-                            "parsered " % log_dir)
+        logging.info("Dir %s is empty or not contains log files with valid names or all logs files were parsered " %
+                     log_dir)
+        return
 
     # формат даты YYYYMMDD позволяет просто сортировать в лексикографическом порядке
     log_files.sort(reverse=True)
@@ -105,9 +99,11 @@ def get_statistin_from_log_file(filename, report_size, parse_error_perc):
         request_time_count += request_time
         request_count += 1
 
-    if request_count > 0 and parse_error_count / request_count > (parse_error_perc / 100.0):
-        raise ParseException("There ara many errors during parcing log file. Error perc %f" % (parse_error_count /
-                                                                                               request_count))
+    if request_count > 0:
+        parse_error_ratio = parse_error_count / request_count
+        if parse_error_ratio > (parse_error_perc / 100.0):
+            logging.info("There ara many errors during parcing log file. Error perc %f" % parse_error_ratio)
+            return
 
     return count_statistic(urls_rate, request_count, request_time_count, report_size)
 
@@ -174,16 +170,18 @@ def get_args():
     return parser.parse_args()
 
 
+def is_config_exist(file_config):
+    return os.path.isfile(file_config)
+
+
 def merge_config(default_config, file_config):
-    if not os.path.isfile(file_config):
-        raise FileNotFoundError("Config file '%s' not found" % file_config)
 
     with open(file_config, 'r') as stream:
         user_config = {}
         try:
             user_config = yaml.load(stream)
-        except yaml.YAMLError as exc:
-            raise yaml.YAMLError("Errors during reading '%s'. Please check yaml file" % file_config)
+        except yaml.YAMLError:
+            return
     default_config.update(user_config)
     return default_config
 
@@ -233,10 +231,24 @@ def config_logger(filename):
 
 def run(config):
     args = get_args()
+    if not is_config_exist(args.config):
+        logging.info("Config file '%s' not found" % args.config)
+        return
     config = merge_config(config, args.config)
+
+    if not config:
+        logging.info("Errors during reading '%s'. Please check yaml file" % args.config)
+        return
+
     config_logger(config['LOG_FILE'])
+
     log_file = detect_last_log_file(config['LOG_DIR'], config['REPORT_DIR'])
+    if not log_file:
+        return
+
     urls_statistic = get_statistin_from_log_file(log_file, config['REPORT_SIZE'], config['PARSE_ERROR_PERC'])
+    if not urls_statistic:
+        return
     write_report(urls_statistic, log_file, config['REPORT_DIR'])
 
 
@@ -246,21 +258,14 @@ def main(config):
     # https://docs.python.org/2/howto/doanddont.html#exceptions
     try:
         run(config)
-    except SystemExit:
-        pass
-    except DoneException as e:
-        logging.info(e)
-    except (FileNotFoundError, NotADirectoryError, yaml.YAMLError, ParseException) as e:
-        logging.error(e)
-        exit(1)
     except KeyboardInterrupt:
         logging.error("The script is interrupted and data report can be corrupted")
-        exit(2)
-    except BaseException:
+        sys.exit(2)
+    except Exception:
         logging.error("Critical error during execution the script, see logs")
         logging.exception(traceback)
-        exit(3)
+        sys.exit(3)
 
 
 if __name__ == "__main__":
-    main(global_config)
+    main(DEFAULT_CONFIG)
