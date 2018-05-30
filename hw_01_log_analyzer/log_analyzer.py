@@ -4,7 +4,6 @@ import os
 import glob
 import re
 import gzip
-import traceback
 import statistics
 import argparse
 import yaml
@@ -12,6 +11,7 @@ import logging
 import logging.handlers
 from string import Template
 import sys
+from collections import namedtuple
 
 
 DEFAULT_CONFIG = {
@@ -28,45 +28,41 @@ def detect_last_log_file(log_dir, report_dir):
         logging.info("Log dir '%s' not found" % log_dir)
         return
 
-    if not os.path.isdir(report_dir):
-        os.mkdir(report_dir)
-
+    # формат даты YYYYMMDD позволяет просто сортировать в лексикографическом порядке
     log_files = glob.glob(os.path.join(log_dir, "nginx-access-ui.log-*"))
+    log_files.sort()
+    last_log_file = None
+    LogFile = namedtuple('LogFile', ['filename', 'date'])
 
-    for log_file in log_files:
+    for filename in log_files:
+        filename = os.path.basename(filename)
         try:
-            log_date = get_date_from_filename(log_file)
+            log_date = get_date_from_filename(filename)
         except ValueError:
-            log_files.remove(log_file)
             continue
-        if not check_log_filename(os.path.basename(log_file)) or \
-                os.path.isfile(os.path.join(report_dir, "report-%s.%s.%s.html" % log_date)):
-            log_files.remove(log_file)
 
-    if not log_files:
+        if os.path.isfile(os.path.join(report_dir, "report-%s.%s.%s.html" % log_date)):
+            continue
+
+        last_log_file = LogFile(filename=os.path.join(log_dir, filename), date=log_date)
+
+    if not last_log_file:
         logging.info("Dir %s is empty or not contains log files with valid names or all logs files were parsered " %
                      log_dir)
         return
 
-    # формат даты YYYYMMDD позволяет просто сортировать в лексикографическом порядке
-    log_files.sort(reverse=True)
-
-    logging.info("Working with file %r" % log_files[0])
-    return log_files[0]
+    logging.info("Working with file %r" % last_log_file.filename)
+    return last_log_file
 
 
 def get_date_from_filename(filename):
-    mo = re.search(r'(\d{4})(\d{2})(\d{2})', filename)
-    if not mo or len(mo.groups()) != 3:
+    mo = re.search(r'nginx-access-ui\.log-(\d{4})(\d{2})(\d{2})(\.gz)?', filename)
+    if not mo:
         raise ValueError()
     log_year = mo.group(1)
     log_month = mo.group(2)
     log_day = mo.group(3)
     return log_year, log_month, log_day
-
-
-def check_log_filename(filename):
-    return bool(re.match("^nginx-access-ui\.log-\d{8}(\.gz)?$", filename))
 
 
 # log_format ui_short
@@ -79,13 +75,13 @@ def check_log_filename(filename):
 # 200 927 "-" "Lynx/2.8.8dev.9 libwww-FM/2.14 SSL-MM/1.4.1 GNUTLS/2.10.5" "-" "1498697422-2190034393-4708-9752759"
 # "dc7161be3"
 # 0.390
-def get_statistin_from_log_file(filename, report_size, parse_error_perc):
+def get_statistic_from_log_file(log_file, report_size, parse_error_perc):
 
     urls_rate = {}
     parse_error_count = 0   # Количество ошибок при парсинге
     request_count = 0       # Общее количество запросов
     request_time_count = 0  # Общее время на все запросы
-    for line in return_read_log_file(filename):
+    for line in return_read_log_file(log_file.filename):
         mo = re.search(r'\] \"\w* (.*?) HTTP.* (.*?)$', line)
         if not mo or len(mo.groups()) != 2:
             parse_error_count += 1
@@ -137,9 +133,8 @@ def return_read_log_file(filename):
                 yield line
 
 
-def write_report(urls_statistic, log_filename, report_dir):
-    report_date = get_date_from_filename(log_filename)
-    report_filename = "report-%s.%s.%s.html" % report_date
+def write_report(urls_statistic, log_file, report_dir):
+    report_filename = "report-%s.%s.%s.html" % log_file.date
     report_path = os.path.join(report_dir, report_filename)
     with open(report_path, 'w') as report_file:
         with open("resources/report.html.template", 'r') as template_file:
@@ -147,11 +142,6 @@ def write_report(urls_statistic, log_filename, report_dir):
             report_template = Template(template_file_raw)
             table_json = {"table_json": get_result_for_write(urls_statistic)}
             report_file.write(report_template.safe_substitute(table_json))
-            # for line in template_file:
-            #     if line == "    var table = $table_json;\n":
-            #         report_file.write("    var table = %s;\n" % get_result_for_write(urls_statistic))
-            #     else:
-            #         report_file.write(line)
     logging.info("Отчет был записан в %s" % report_path)
 
 
@@ -168,10 +158,6 @@ def get_args():
     parser = argparse.ArgumentParser(description='Parse log files.')
     parser.add_argument('-c', '--config', help='path to conf.yaml', default='conf.yaml')
     return parser.parse_args()
-
-
-def is_config_exist(file_config):
-    return os.path.isfile(file_config)
 
 
 def merge_config(default_config, file_config):
@@ -207,31 +193,10 @@ def config_logger(filename):
     console.setFormatter(formatter)
     logging.getLogger('').addHandler(console)
 
-    # Это на случай если захочу подключить Syslog
-    """
-    syslog_address = '/dev/log'
-    if platform.system() == 'Darwin':
-        syslog_address = '/var/run/syslog'
-
-    logging.info("syslog_address is %s" % syslog_address)
-
-    logger_handler = logging.handlers.SysLogHandler(address=syslog_address)
-    formatter = logging.Formatter('%(name)s: %(levelname)s  %(message)s')
-    logger_handler.setFormatter(formatter)
-    logging.getLogger('').addHandler(logger_handler)
-    """
-
-    # Example for Syslog
-    # syslog_address = '/dev/log'
-    # if platform.system() == 'Darwin':
-    #     syslog_address = '/var/run/syslog'
-    # logging.basicConfig(handlers=[logging.handlers.SysLogHandler(address=syslog_address)], level=log_level,
-    #                     format=log_format, datefmt=log_date_format)
-
 
 def run(config):
     args = get_args()
-    if not is_config_exist(args.config):
+    if not os.path.isfile(args.config):
         logging.info("Config file '%s' not found" % args.config)
         return
     config = merge_config(config, args.config)
@@ -242,12 +207,16 @@ def run(config):
 
     config_logger(config['LOG_FILE'])
 
+    if not os.path.isdir(config['REPORT_DIR']):
+        os.mkdir(config['REPORT_DIR'])
+
     log_file = detect_last_log_file(config['LOG_DIR'], config['REPORT_DIR'])
     if not log_file:
         return
 
-    urls_statistic = get_statistin_from_log_file(log_file, config['REPORT_SIZE'], config['PARSE_ERROR_PERC'])
-    if not urls_statistic:
+    urls_statistic = get_statistic_from_log_file(log_file, config['REPORT_SIZE'],
+                                                 config['PARSE_ERROR_PERC'])
+    if urls_statistic is None:
         return
     write_report(urls_statistic, log_file, config['REPORT_DIR'])
 
@@ -262,8 +231,7 @@ def main(config):
         logging.error("The script is interrupted and data report can be corrupted")
         sys.exit(2)
     except Exception:
-        logging.error("Critical error during execution the script, see logs")
-        logging.exception(traceback)
+        logging.exception("Critical error during execution the script, see logs")
         sys.exit(3)
 
 
