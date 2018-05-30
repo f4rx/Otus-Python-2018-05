@@ -23,7 +23,7 @@ DEFAULT_CONFIG = {
 }
 
 
-def detect_last_log_file(log_dir, report_dir):
+def get_log_file_for_convert(log_dir, report_dir):
     if not os.path.isdir(log_dir):
         logging.info("Log dir '%s' not found" % log_dir)
         return
@@ -210,7 +210,7 @@ def run(config):
     if not os.path.isdir(config['REPORT_DIR']):
         os.mkdir(config['REPORT_DIR'])
 
-    log_file = detect_last_log_file(config['LOG_DIR'], config['REPORT_DIR'])
+    log_file = get_log_file_for_convert(config['LOG_DIR'], config['REPORT_DIR'])
     if not log_file:
         return
 

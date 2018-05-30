@@ -36,18 +36,18 @@ class LogAnalyzerTest(unittest.TestCase):
             dir_mock.return_value = True
             with patch('glob.glob') as glob_mock:
                 glob_mock.return_value = ["nginx-access-ui.log-20170629.gz", "nginx-access-ui.log-20170630"]
-                self.assertEqual(log_analyzer.detect_last_log_file("fake_dir1", "fake_dir2").filename,
+                self.assertEqual(log_analyzer.get_log_file_for_convert("fake_dir1", "fake_dir2").filename,
                                  "fake_dir1/nginx-access-ui.log-20170630")
 
-                self.assertEqual(log_analyzer.detect_last_log_file("fake_dir1", "fake_dir2").date,
+                self.assertEqual(log_analyzer.get_log_file_for_convert("fake_dir1", "fake_dir2").date,
                                  ("2017", "06", "30"))
 
                 glob_mock.return_value = ["nginx-access-ui.log-20170629.gz", "nginx-access-ui.log-20170630",
                                       "nginx-access-ui.log-20170631.gz"]
-                self.assertEqual(log_analyzer.detect_last_log_file("fake_dir1", "fake_dir2").filename,
+                self.assertEqual(log_analyzer.get_log_file_for_convert("fake_dir1", "fake_dir2").filename,
                                  "fake_dir1/nginx-access-ui.log-20170631.gz")
                 glob_mock.return_value = []
-                self.assertEqual(log_analyzer.detect_last_log_file("fake_dir1", "fake_dir2"), None)
+                self.assertEqual(log_analyzer.get_log_file_for_convert("fake_dir1", "fake_dir2"), None)
                 # with self.assertRaises(log_analyzer.DoneException):
                 #     log_analyzer.detect_last_log_file("fake_dir1", "fake_dir2")
 
