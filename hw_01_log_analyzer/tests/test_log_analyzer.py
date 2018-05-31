@@ -27,7 +27,7 @@ class LogAnalyzerTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             log_analyzer.get_date_from_filename("")
 
-    def test_return_read_log_file(self):
+    def test_get_last_log(self):
         """
         Тут пробовал реализовать тестирование используя моки и патчинг. Делал в первый раз, в каком-то роде просто
         копипаста, поэтому неоптимально. Но оставтлю себе на память.
@@ -36,20 +36,22 @@ class LogAnalyzerTest(unittest.TestCase):
             dir_mock.return_value = True
             with patch('glob.glob') as glob_mock:
                 glob_mock.return_value = ["nginx-access-ui.log-20170629.gz", "nginx-access-ui.log-20170630"]
-                self.assertEqual(log_analyzer.get_log_file_for_convert("fake_dir1", "fake_dir2").filename,
+                self.assertEqual(log_analyzer.get_last_log("fake_dir1").filename,
                                  "nginx-access-ui.log-20170630")
 
-                self.assertEqual(log_analyzer.get_log_file_for_convert("fake_dir1", "fake_dir2").date,
-                                 ("2017", "06", "30"))
+                self.assertEqual(log_analyzer.get_last_log("fake_dir1").date, ("2017", "06", "30"))
 
                 glob_mock.return_value = ["nginx-access-ui.log-20170629.gz", "nginx-access-ui.log-20170630",
                                       "nginx-access-ui.log-20170631.gz"]
-                self.assertEqual(log_analyzer.get_log_file_for_convert("fake_dir1", "fake_dir2").filename,
+                self.assertEqual(log_analyzer.get_last_log("fake_dir1").filename,
                                  "nginx-access-ui.log-20170631.gz")
+
                 glob_mock.return_value = []
-                self.assertEqual(log_analyzer.get_log_file_for_convert("fake_dir1", "fake_dir2"), None)
-                # with self.assertRaises(log_analyzer.DoneException):
-                #     log_analyzer.detect_last_log_file("fake_dir1", "fake_dir2")
+                self.assertEqual(log_analyzer.get_last_log("fake_dir1"), None)
+
+                glob_mock.return_value = ["nginx-access-ui.log-20170629.gz", "nginx-access-ui.log-20170630.gz-foobar"]
+                self.assertEqual(log_analyzer.get_last_log("fake_dir1"), None)
+
 
     def test_merge_config(self):
         """

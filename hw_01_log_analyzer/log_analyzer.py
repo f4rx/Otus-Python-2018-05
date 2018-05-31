@@ -23,39 +23,30 @@ DEFAULT_CONFIG = {
 }
 
 
-def get_log_file_for_convert(log_dir, report_dir):
+def get_last_log(log_dir):
     if not os.path.isdir(log_dir):
         logging.info("Log dir '%s' not found" % log_dir)
         return
 
-    # формат даты YYYYMMDD позволяет просто сортировать в лексикографическом порядке
     log_files = glob.glob(os.path.join(log_dir, "nginx-access-ui.log-*"))
-    log_files.sort()
-    last_log_file = None
-    LogFile = namedtuple('LogFile', ['filename', 'date'])
-
-    for filename in log_files:
-        try:
-            log_date = get_date_from_filename(os.path.basename(filename))
-        except ValueError:
-            continue
-
-        if os.path.isfile(os.path.join(report_dir, "report-%s.%s.%s.html" % log_date)):
-            continue
-
-        last_log_file = LogFile(filename=filename, date=log_date)
-
-    if not last_log_file:
-        logging.info("Dir %s is empty or not contains log files with valid names or all logs files were parsered " %
-                     log_dir)
+    log_files.sort(reverse=True)
+    try:
+        log_date = get_date_from_filename(os.path.basename(log_files[0]))
+    except (ValueError, IndexError):
+        logging.info("Error during detect log_file. Please check files in log dir %r" % log_dir)
         return
 
-    logging.info("Working with file %r" % last_log_file.filename)
-    return last_log_file
+    LogFile = namedtuple('LogFile', ['filename', 'date'])
+    logging.info("Working with file %r" % log_files[0])
+    return LogFile(filename=log_files[0], date=log_date)
+
+
+def check_report_for_log_file(log_file, report_dir):
+    return os.path.isfile(os.path.join(report_dir, "report-%s.%s.%s.html" % log_file.date))
 
 
 def get_date_from_filename(filename):
-    mo = re.search(r'nginx-access-ui\.log-(\d{4})(\d{2})(\d{2})(\.gz)?', filename)
+    mo = re.search(r'nginx-access-ui\.log-(\d{4})(\d{2})(\d{2})(\.gz)?$', filename)
     if not mo:
         raise ValueError()
     log_year = mo.group(1)
@@ -209,8 +200,12 @@ def run(config):
     if not os.path.isdir(config['REPORT_DIR']):
         os.mkdir(config['REPORT_DIR'])
 
-    log_file = get_log_file_for_convert(config['LOG_DIR'], config['REPORT_DIR'])
+    log_file = get_last_log(config['LOG_DIR'])
     if not log_file:
+        return
+
+    if check_report_for_log_file(log_file=log_file, report_dir=config['REPORT_DIR']):
+        logging.info("The report for file %r is already exists. Exit" % log_file.filename)
         return
 
     urls_statistic = get_statistic_from_log_file(log_file, config['REPORT_SIZE'],
