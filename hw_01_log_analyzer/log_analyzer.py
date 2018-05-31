@@ -33,7 +33,7 @@ def get_last_log(log_dir):
     try:
         log_date = get_date_from_filename(os.path.basename(log_files[0]))
     except (ValueError, IndexError):
-        logging.info("Error during detect log_file. Please check files in log dir %r" % log_dir)
+        logging.error("Error during detect log_file. Please check files in log dir %r" % log_dir)
         return
 
     LogFile = namedtuple('LogFile', ['filename', 'date'])
