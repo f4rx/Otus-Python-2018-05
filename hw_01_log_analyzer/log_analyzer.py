@@ -35,16 +35,15 @@ def get_log_file_for_convert(log_dir, report_dir):
     LogFile = namedtuple('LogFile', ['filename', 'date'])
 
     for filename in log_files:
-        filename = os.path.basename(filename)
         try:
-            log_date = get_date_from_filename(filename)
+            log_date = get_date_from_filename(os.path.basename(filename))
         except ValueError:
             continue
 
         if os.path.isfile(os.path.join(report_dir, "report-%s.%s.%s.html" % log_date)):
             continue
 
-        last_log_file = LogFile(filename=os.path.join(log_dir, filename), date=log_date)
+        last_log_file = LogFile(filename=filename, date=log_date)
 
     if not last_log_file:
         logging.info("Dir %s is empty or not contains log files with valid names or all logs files were parsered " %
