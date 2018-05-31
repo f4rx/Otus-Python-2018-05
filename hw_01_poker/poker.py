@@ -119,18 +119,27 @@ def flush(hand):
 def straight(ranks):
     """Возвращает True, если отсортированные ранги формируют последовательность 5ти,
     где у 5ти карт ранги идут по порядку (стрит)"""
-    return ranks[-1] - ranks[0] == 4
+    for i, rank in enumerate(sorted(ranks[:-1])):
+        if ranks[i+1] - rank != 1:
+            return
+    return True
 
 
 def kind(n, ranks):
     """Возвращает первый ранг, который n раз встречается в данной руке.
     Возвращает None, если ничего не найдено"""
-    for _ranks in itertools.combinations(ranks, n):
-        if _ranks.count(_ranks[0]) == n and ranks.count(_ranks[0]) == n:
+    # for _ranks in itertools.combinations(ranks, n):
+    #     if _ranks.count(_ranks[0]) == n and ranks.count(_ranks[0]) == n:
             # if ranks == [8, 8, 10, 10, 10]:
             #     print(ranks)
-            return _ranks[0]
-    return
+            # return _ranks[0]
+    rank = 0
+    for _rank in ranks:
+        if ranks.count(_rank) == n and _rank > rank:
+            rank = _rank
+    if rank == 0:
+        return
+    return rank
 
 
 def two_pair(ranks):
@@ -156,13 +165,28 @@ def best_hand(hand):
         if _hand_rank[0] > top_hand.hand_rank[0]:
             # print("old hand:", top_hand.hand, "new hand:", _hand, "rank:", _hand_rank)
             top_hand = Hand(hand=_hand, hand_rank=_hand_rank)
+            print("old hand:", top_hand.hand, "new hand:", _hand, "rank:", _hand_rank)
         elif _hand_rank[0] == top_hand.hand_rank[0]:
-            if _hand_rank[0] in [7, 6, 3, 1]:
-                if _hand_rank[1] > int(top_hand.hand_rank[1]) or (_hand_rank[1] == int(top_hand.hand_rank[1]) and
-                                                                  _hand_rank[2] >  int(top_hand.hand_rank[2])):
-                    # print("old hand:", top_hand.hand, "new hand:", _hand, "rank:", _hand_rank)
+            # Check Rank in Flash Royal
+            # rank: (8, 11)
+            if _hand_rank[0] == 8 or _hand_rank[0] == 4 or _hand_rank[0] == 0:
+                if _hand_rank[1] > top_hand.hand_rank[1]:
+                    print("old hand:", top_hand.hand, "new hand:", _hand, "rank:", _hand_rank)
                     top_hand = Hand(hand=_hand, hand_rank=_hand_rank)
-            if _hand_rank[0] == 2:
+            # Test Flash
+            # rank: (5, [5, 7, 9, 10, 12])
+            # rank: (5, [5, 8, 9, 10, 12])
+            elif _hand_rank[0] == 5:
+                if sorted(_hand_rank[1], reverse=True) > sorted(top_hand.hand_rank[1], reverse=True):
+                    print("old hand:", top_hand.hand, "new hand:", _hand, "rank:", _hand_rank)
+                    top_hand = Hand(hand=_hand, hand_rank=_hand_rank)
+
+            elif _hand_rank[0] in [7, 6, 3, 1]:
+                if _hand_rank[1] > int(top_hand.hand_rank[1]) or (_hand_rank[1] == int(top_hand.hand_rank[1]) and
+                                                                  _hand_rank[2] > top_hand.hand_rank[2]):
+                    print("old hand:", top_hand.hand, "new hand:", _hand, "rank:", _hand_rank)
+                    top_hand = Hand(hand=_hand, hand_rank=_hand_rank)
+            elif _hand_rank[0] == 2:
                 # Сравниваем две пары, если пары одинаковые, то выьираем пятой карту с наибольшим рангом.
                 # rank: (2, [5, 2], [2, 2, 5, 5, 8])
                 # rank: (2, [5, 2], [2, 2, 5, 5, 10])
@@ -173,7 +197,7 @@ def best_hand(hand):
                         print("old hand:", top_hand.hand, "new hand:", _hand, "rank:", _hand_rank)
                         top_hand = Hand(hand=_hand, hand_rank=_hand_rank)
 
-    print("Best hand", top_hand.hand)
+    print("Best hand", sorted(top_hand.hand), "\n")
     return list(top_hand.hand)
 
 
@@ -181,9 +205,42 @@ def best_wild_hand(hand):
     """best_hand но с джокерами"""
     return
 
-
 def test_best_hand():
     print("test_best_hand...")
+    # Test Flash Royal (8)
+    assert (sorted(best_hand("AS KS JS 8S 7S QS TS".split()))
+            == sorted(['TS', 'JS', 'QS', 'KS', 'AS']))
+    assert (sorted(best_hand("7C 8C 9C TC JC QC KC".split()))
+            == sorted(['9C', 'JC', 'TC', 'QC', 'KC']))
+
+    # # Test 4 Q (7)
+    assert (sorted(best_hand("6C 7C QC QS QH QD KS".split()))
+            == sorted(['QC', 'QS', 'QH', 'QD', 'KS']))
+
+    # # Test kind(3, ranks) and kind(2, ranks) (6)
+    assert (sorted(best_hand("6C 7C 7S 7H 8C 8S JS".split()))
+            == sorted(['7C', '7S', '7H', '8C', '8S']))
+
+    # # Test Flash (5)
+    assert (sorted(best_hand("5C 7C 8C 9C TC JS QC".split()))
+            == sorted(['7C', '8C', '9C', 'TC', 'QC']))
+
+    # Test straight (4)
+    assert (sorted(best_hand("5S 7C 8S 9C TC JS QC".split()))
+            == sorted(['8S', '9C', 'TC', 'JS', 'QC']))
+
+    # Test 3 same and others (3)
+    assert (sorted(best_hand("7S 7C 7D 6C 5C 4S 2C".split()))
+            == sorted(['7S', '7C', '7D', '6C', '5C']))
+
+    # Test 2 pair (2)
+    assert (sorted(best_hand("7S 7C 5D JC KD JS 2C".split()))
+            == sorted(['7C', '7S', 'JC', 'JS', 'KD']))
+
+    # Test 1 pair (1)
+    assert (sorted(best_hand("2S 2C 5D 4C KD JS 3C".split()))
+            == sorted(['2C', '2S', '5D', 'JS', 'KD']))
+
     assert (sorted(best_hand("6C 7C 8C 9C TC 5C JS".split()))
             == ['6C', '7C', '8C', '9C', 'TC'])
     assert (sorted(best_hand("TD TC TH 7C 7D 8C 8S".split()))
