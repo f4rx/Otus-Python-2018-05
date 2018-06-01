@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import os
-import glob
 import re
 import gzip
 import statistics
@@ -28,31 +27,42 @@ def get_last_log(log_dir):
         logging.info("Log dir '%s' not found" % log_dir)
         return
 
-    log_files = glob.glob(os.path.join(log_dir, "nginx-access-ui.log-*"))
-    log_files.sort(reverse=True)
-    try:
-        log_date = get_date_from_filename(os.path.basename(log_files[0]))
-    except (ValueError, IndexError):
+    log_files = sorted(os.listdir(log_dir), reverse=True)
+
+    log_date = None
+
+    for log_file in log_files:
+        try:
+            log_date, file_format = get_date_and_format_from_filename(log_file)
+            break
+        except ValueError:
+            continue
+
+    if not log_date:
         logging.error("Error during detect log_file. Please check files in log dir %r" % log_dir)
         return
 
-    LogFile = namedtuple('LogFile', ['filename', 'date'])
-    logging.info("Working with file %r" % log_files[0])
-    return LogFile(filename=log_files[0], date=log_date)
+    LogFile = namedtuple('LogFile', ['filename', 'date', 'file_format'])
+    logging.info("Working with file %r" % log_file)
+    return LogFile(filename=os.path.join(log_dir, log_file), date=log_date, file_format=file_format)
 
 
 def check_report_for_log_file(log_file, report_dir):
     return os.path.isfile(os.path.join(report_dir, "report-%s.%s.%s.html" % log_file.date))
 
 
-def get_date_from_filename(filename):
-    mo = re.search(r'nginx-access-ui\.log-(\d{4})(\d{2})(\d{2})(\.gz)?$', filename)
+def get_date_and_format_from_filename(filename):
+    mo = re.search(r'^nginx-access-ui\.log-(\d{4})(\d{2})(\d{2})\.?(gz)?$', filename)
     if not mo:
         raise ValueError()
+    print(filename)
     log_year = mo.group(1)
     log_month = mo.group(2)
     log_day = mo.group(3)
-    return log_year, log_month, log_day
+    file_format = 'plain'
+    if mo.group(4):
+        file_format = mo.group(4)
+    return (log_year, log_month, log_day), file_format
 
 
 # log_format ui_short
@@ -71,7 +81,7 @@ def get_statistic_from_log_file(log_file, report_size, parse_error_perc):
     parse_error_count = 0   # Количество ошибок при парсинге
     request_count = 0       # Общее количество запросов
     request_time_count = 0  # Общее время на все запросы
-    for line in return_read_log_file(log_file.filename):
+    for line in return_read_log_file(log_file.filename, log_file.file_format):
         mo = re.search(r'\] \"\w* (.*?) HTTP.* (.*?)$', line)
         if not mo or len(mo.groups()) != 2:
             parse_error_count += 1
@@ -91,10 +101,18 @@ def get_statistic_from_log_file(log_file, report_size, parse_error_perc):
             logging.info("There ara many errors during parcing log file. Error perc %f" % parse_error_ratio)
             return
 
-    return count_statistic(urls_rate, request_count, request_time_count, report_size)
+    RawUrlData = namedtuple('RawUrlData', ['urls_rate', 'request_count', 'request_time_count', 'report_size'])
+    raw_url_data = RawUrlData(urls_rate=urls_rate, request_count=request_count, request_time_count=request_time_count,
+                              report_size=report_size)
+
+    return raw_url_data
 
 
-def count_statistic(urls_rate, request_count, request_time, report_size):
+def count_statistic(raw_url_data):
+    urls_rate = raw_url_data.urls_rate
+    request_count = raw_url_data.request_count
+    request_time = raw_url_data.request_time_count
+    report_size = raw_url_data.report_size
     urls_statistic = {}
     for key, value in urls_rate.items():
         total_request_time = sum(value)
@@ -112,26 +130,28 @@ def count_statistic(urls_rate, request_count, request_time, report_size):
     return urls_statistic
 
 
-def return_read_log_file(filename):
-    if re.match(".*\.gz$", filename):
-        with gzip.open(filename, 'rb') as log_file:
-            for line in log_file:
-                yield line.decode()
+def return_read_log_file(filename, file_format):
+    if file_format == 'gz':
+        open_f = gzip.open
     else:
-        with open(filename) as log_file:
-            for line in log_file:
-                yield line
+        open_f = open
+
+    with open_f(filename, 'rb') as log_file:
+        for line in log_file:
+            yield line.decode()
 
 
 def write_report(urls_statistic, log_file, report_dir):
     report_filename = "report-%s.%s.%s.html" % log_file.date
     report_path = os.path.join(report_dir, report_filename)
-    with open(report_path, 'w') as report_file:
+    report_path_tmp = report_path + ".tmp"
+    with open(report_path_tmp, 'w') as report_file:
         with open("resources/report.html.template", 'r') as template_file:
             template_file_raw = template_file.read()
             report_template = Template(template_file_raw)
             table_json = {"table_json": get_result_for_write(urls_statistic)}
             report_file.write(report_template.safe_substitute(table_json))
+    os.rename(report_path_tmp, report_path)
     logging.info("Отчет был записан в %s" % report_path)
 
 
@@ -208,10 +228,16 @@ def run(config):
         logging.info("The report for file %r is already exists. Exit" % log_file.filename)
         return
 
-    urls_statistic = get_statistic_from_log_file(log_file, config['REPORT_SIZE'],
-                                                 config['PARSE_ERROR_PERC'])
+    raw_url_data = get_statistic_from_log_file(log_file, config['REPORT_SIZE'], config['PARSE_ERROR_PERC'])
+
+    if not raw_url_data:
+        return
+
+    urls_statistic = count_statistic(raw_url_data)
+
     if urls_statistic is None:
         return
+
     write_report(urls_statistic, log_file, config['REPORT_DIR'])
 
 
@@ -223,10 +249,10 @@ def main(config):
         run(config)
     except KeyboardInterrupt:
         logging.error("The script is interrupted and data report can be corrupted")
-        sys.exit(2)
+        sys.exit(1)
     except Exception:
         logging.exception("Critical error during execution the script, see logs")
-        sys.exit(3)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

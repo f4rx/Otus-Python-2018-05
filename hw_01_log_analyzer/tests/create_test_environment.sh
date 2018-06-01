@@ -1,5 +1,38 @@
 #!/usr/bin/env bash
 
+for i in `seq 1 16`; do mkdir fake_dir${i}; done
+
+#fake_dir1 - empty dir
+
+for file in foobarcom nginx-access-ui.log-20170628 nginx-access-ui.log-20170629.gz nginx-access-ui.log-20170630 \
+            nginx-access-ui.log-2017063-foobarcom;
+do
+    touch fake_dir2/${file}
+done
+
+for file in foobarcom nginx-access-ui.log-20170628 nginx-access-ui.log-20170629 nginx-access-ui.log-20170630.gz \
+            nginx-access-ui.log-2017063-foobarcom;
+do
+    touch fake_dir3/${file}
+done
+
+for file in nginx-access-ui.log-20170628 nginx-access-ui.log-20170629.gz; do
+    touch fake_dir4/${file}
+done
+
+for file in nginx-access-ui.log-20170628.gz nginx-access-ui.log-20170629; do
+    touch fake_dir5/${file}
+done
+
+for file in nginx-access-ui.log-20170629; do
+    touch fake_dir6/${file}
+done
+
+for file in foo nginx-access-ui.log-20170629-foobarcom; do
+    touch fake_dir7/${file}
+done
+
+
 mkdir log1 log2 log3
 for file in nginx-access-ui.log-20170628 nginx-access-ui.log-20170629.gz nginx-access-ui.log-2017063; do
     touch log1/${file}

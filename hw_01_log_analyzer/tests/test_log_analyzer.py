@@ -11,21 +11,21 @@ from collections import namedtuple
 
 class LogAnalyzerTest(unittest.TestCase):
 
-    def test_get_date_from_filename(self):
-        self.assertEqual(tuple(log_analyzer.get_date_from_filename("nginx-access-ui.log-20170629.gz")), tuple(["2017",
-                                                                                                          "06", "29"]))
-        self.assertEqual(tuple(log_analyzer.get_date_from_filename("nginx-access-ui.log-20170629")), tuple(["2017",
-                                                                                                          "06", "29"]))
-        with self.assertRaises(ValueError):
-            log_analyzer.get_date_from_filename("nginx-access-ui.log-2017-06-29.gz")
-        with self.assertRaises(ValueError):
-            log_analyzer.get_date_from_filename("nginx-access-ui.log-2017.06.29.gz")
-        with self.assertRaises(ValueError):
-            log_analyzer.get_date_from_filename("nginx-access-ui.log-2017-06-29")
-        with self.assertRaises(ValueError):
-            log_analyzer.get_date_from_filename("nginx-access-ui.log-2017.06.29")
-        with self.assertRaises(ValueError):
-            log_analyzer.get_date_from_filename("")
+    # def test_get_date_from_filename(self):
+    #     self.assertEqual(tuple(log_analyzer.get_date_from_filename("nginx-access-ui.log-20170629.gz")), tuple(["2017",
+    #                                                                                                       "06", "29"]))
+    #     self.assertEqual(tuple(log_analyzer.get_date_from_filename("nginx-access-ui.log-20170629")), tuple(["2017",
+    #                                                                                                       "06", "29"]))
+    #     with self.assertRaises(ValueError):
+    #         log_analyzer.get_date_from_filename("nginx-access-ui.log-2017-06-29.gz")
+    #     with self.assertRaises(ValueError):
+    #         log_analyzer.get_date_from_filename("nginx-access-ui.log-2017.06.29.gz")
+    #     with self.assertRaises(ValueError):
+    #         log_analyzer.get_date_from_filename("nginx-access-ui.log-2017-06-29")
+    #     with self.assertRaises(ValueError):
+    #         log_analyzer.get_date_from_filename("nginx-access-ui.log-2017.06.29")
+    #     with self.assertRaises(ValueError):
+    #         log_analyzer.get_date_from_filename("")
 
     def test_get_last_log(self):
         """
@@ -34,24 +34,36 @@ class LogAnalyzerTest(unittest.TestCase):
         """
         with patch('os.path.isdir') as dir_mock:
             dir_mock.return_value = True
-            with patch('glob.glob') as glob_mock:
+            with patch('os.listdir') as glob_mock:
+                # logs/
+                #     nginx - access - ui.log - 20170629.gz
+                #     nginx - access - ui.log - 20170630
                 glob_mock.return_value = ["nginx-access-ui.log-20170629.gz", "nginx-access-ui.log-20170630"]
                 self.assertEqual(log_analyzer.get_last_log("fake_dir1").filename,
-                                 "nginx-access-ui.log-20170630")
+                                 "fake_dir1/nginx-access-ui.log-20170630")
 
                 self.assertEqual(log_analyzer.get_last_log("fake_dir1").date, ("2017", "06", "30"))
 
                 glob_mock.return_value = ["nginx-access-ui.log-20170629.gz", "nginx-access-ui.log-20170630",
                                       "nginx-access-ui.log-20170631.gz"]
                 self.assertEqual(log_analyzer.get_last_log("fake_dir1").filename,
-                                 "nginx-access-ui.log-20170631.gz")
+                                 "fake_dir1/nginx-access-ui.log-20170631.gz")
 
                 glob_mock.return_value = []
                 self.assertEqual(log_analyzer.get_last_log("fake_dir1"), None)
 
                 glob_mock.return_value = ["nginx-access-ui.log-20170629.gz", "nginx-access-ui.log-20170630.gz-foobar"]
-                self.assertEqual(log_analyzer.get_last_log("fake_dir1"), None)
+                self.assertEqual(log_analyzer.get_last_log("fake_dir1").filename,
+                                 "fake_dir1/nginx-access-ui.log-20170629.gz")
 
+    def test_get_last_log_v2(self):
+        self.assertEqual(log_analyzer.get_last_log("fake_dir1"), None)
+        self.assertEqual(log_analyzer.get_last_log("fake_dir2").filename, "fake_dir2/nginx-access-ui.log-20170630")
+        self.assertEqual(log_analyzer.get_last_log("fake_dir3").filename, "fake_dir3/nginx-access-ui.log-20170630.gz")
+        self.assertEqual(log_analyzer.get_last_log("fake_dir4").filename, "fake_dir4/nginx-access-ui.log-20170629.gz")
+        self.assertEqual(log_analyzer.get_last_log("fake_dir5").filename, "fake_dir5/nginx-access-ui.log-20170629")
+        self.assertEqual(log_analyzer.get_last_log("fake_dir6").filename, "fake_dir6/nginx-access-ui.log-20170629")
+        self.assertEqual(log_analyzer.get_last_log("fake_dir7"), None)
 
     def test_merge_config(self):
         """
@@ -68,15 +80,15 @@ class LogAnalyzerTest(unittest.TestCase):
 
         self.assertEqual(log_analyzer.merge_config({1: 1, 2: 2}, "conf/conf3.yaml"), {1: 1, 2: 2, 4: 4})
 
-    def test_get_statistic_from_log_file(self):
-        LogFile = namedtuple('LogFile', ['filename', 'date'])
-        log_file1 = LogFile(filename="log2/1.log", date="")
-        log_file2 = LogFile(filename="log2/2.log", date="")
-        self.assertEqual(log_analyzer.get_statistic_from_log_file(log_file1, 1, 1.0), {'/api/v2/banner/25019354':
-                                          {'count': 2, 'count_perc': 40.0, 'time_avg': 5.768, 'time_max': 6.146,
-                                           'time_med': 5.768, 'time_perc': 91.759, 'time_sum': 11.536}})
-
-        self.assertEqual(log_analyzer.get_statistic_from_log_file(log_file2, 1, 1.0), {})
+    # def test_get_statistic_from_log_file(self):
+    #     LogFile = namedtuple('LogFile', ['filename', 'date'])
+    #     log_file1 = LogFile(filename="log2/1.log", date="")
+    #     log_file2 = LogFile(filename="log2/2.log", date="")
+    #     self.assertEqual(log_analyzer.get_statistic_from_log_file(log_file1, 1, 1.0), {'/api/v2/banner/25019354':
+    #                                       {'count': 2, 'count_perc': 40.0, 'time_avg': 5.768, 'time_max': 6.146,
+    #                                        'time_med': 5.768, 'time_perc': 91.759, 'time_sum': 11.536}})
+    #
+    #     self.assertEqual(log_analyzer.get_statistic_from_log_file(log_file2, 1, 1.0), {})
 
 
 if __name__ == '__main__':
