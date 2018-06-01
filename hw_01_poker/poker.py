@@ -128,11 +128,6 @@ def straight(ranks):
 def kind(n, ranks):
     """Возвращает первый ранг, который n раз встречается в данной руке.
     Возвращает None, если ничего не найдено"""
-    # for _ranks in itertools.combinations(ranks, n):
-    #     if _ranks.count(_ranks[0]) == n and ranks.count(_ranks[0]) == n:
-            # if ranks == [8, 8, 10, 10, 10]:
-            #     print(ranks)
-            # return _ranks[0]
     rank = 0
     for _rank in ranks:
         if ranks.count(_rank) == n and _rank > rank:
@@ -181,11 +176,21 @@ def best_hand(hand):
                     print("old hand:", top_hand.hand, "new hand:", _hand, "rank:", _hand_rank)
                     top_hand = Hand(hand=_hand, hand_rank=_hand_rank)
 
-            elif _hand_rank[0] in [7, 6, 3, 1]:
+            elif _hand_rank[0] in [7, 6]:
                 if _hand_rank[1] > int(top_hand.hand_rank[1]) or (_hand_rank[1] == int(top_hand.hand_rank[1]) and
                                                                   _hand_rank[2] > top_hand.hand_rank[2]):
                     print("old hand:", top_hand.hand, "new hand:", _hand, "rank:", _hand_rank)
                     top_hand = Hand(hand=_hand, hand_rank=_hand_rank)
+
+            #(3, kind(3, ranks), ranks)
+            #(1, kind(2, ranks), ranks)
+            elif _hand_rank[0] in [3, 1]:
+                if _hand_rank[1] > int(top_hand.hand_rank[1]) or \
+                        (_hand_rank[1] == int(top_hand.hand_rank[1]) and
+                           sorted(_hand_rank[2], reverse=True) > sorted(top_hand.hand_rank[2], reverse=True)):
+                    print("old hand:", top_hand.hand, "new hand:", _hand, "rank:", _hand_rank)
+                    top_hand = Hand(hand=_hand, hand_rank=_hand_rank)
+
             elif _hand_rank[0] == 2:
                 # Сравниваем две пары, если пары одинаковые, то выьираем пятой карту с наибольшим рангом.
                 # rank: (2, [5, 2], [2, 2, 5, 5, 8])
