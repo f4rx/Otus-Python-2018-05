@@ -21,30 +21,33 @@ DEFAULT_CONFIG = {
     "PARSE_ERROR_PERC": 1.0,
 }
 
+LogFile = namedtuple('LogFile', ['filename', 'date', 'file_format'])
+RawUrlData = namedtuple('RawUrlData', ['urls_rate', 'request_count', 'request_time_count', 'report_size'])
+
 
 def get_last_log(log_dir):
     if not os.path.isdir(log_dir):
         logging.info("Log dir '%s' not found" % log_dir)
         return
 
-    log_files = sorted(os.listdir(log_dir), reverse=True)
+    log_files = os.listdir(log_dir)
 
-    log_date = None
+    log_file = None
 
-    for log_file in log_files:
+    for _log_file in log_files:
         try:
-            log_date, file_format = get_date_and_format_from_filename(log_file)
-            break
+            log_date, file_format = get_date_and_format_from_filename(_log_file)
         except ValueError:
             continue
+        if not log_file or log_date > log_file.date:
+            log_file = LogFile(filename=os.path.join(log_dir, _log_file), date=log_date, file_format=file_format)
 
-    if not log_date:
+    if not log_file:
         logging.error("Error during detect log_file. Please check files in log dir %r" % log_dir)
         return
 
-    LogFile = namedtuple('LogFile', ['filename', 'date', 'file_format'])
-    logging.info("Working with file %r" % log_file)
-    return LogFile(filename=os.path.join(log_dir, log_file), date=log_date, file_format=file_format)
+    logging.info("Working with file %r" % log_file.filename)
+    return log_file
 
 
 def check_report_for_log_file(log_file, report_dir):
@@ -55,7 +58,6 @@ def get_date_and_format_from_filename(filename):
     mo = re.search(r'^nginx-access-ui\.log-(\d{4})(\d{2})(\d{2})\.?(gz)?$', filename)
     if not mo:
         raise ValueError()
-    print(filename)
     log_year = mo.group(1)
     log_month = mo.group(2)
     log_day = mo.group(3)
@@ -101,7 +103,6 @@ def get_statistic_from_log_file(log_file, report_size, parse_error_perc):
             logging.info("There ara many errors during parcing log file. Error perc %f" % parse_error_ratio)
             return
 
-    RawUrlData = namedtuple('RawUrlData', ['urls_rate', 'request_count', 'request_time_count', 'report_size'])
     raw_url_data = RawUrlData(urls_rate=urls_rate, request_count=request_count, request_time_count=request_time_count,
                               report_size=report_size)
 
@@ -152,7 +153,7 @@ def write_report(urls_statistic, log_file, report_dir):
             table_json = {"table_json": get_result_for_write(urls_statistic)}
             report_file.write(report_template.safe_substitute(table_json))
     os.rename(report_path_tmp, report_path)
-    logging.info("Отчет был записан в %s" % report_path)
+    logging.info("The report was written into %s" % report_path)
 
 
 def get_result_for_write(urls_statistic):
