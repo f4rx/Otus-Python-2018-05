@@ -1,0 +1,13 @@
+version: "3"
+services:
+    log_analyzer:
+        build: .
+        volumes:
+          - .:/code:ro
+        command: >
+          /bin/sh -c "cp -r /code /test_dir &&
+            cd /test_dir && \
+            sh tests/create_test_environment.sh &&
+            python tests/test_log_analyzer.py -b &&
+            flake8 --max-line-length=119 log_analyzer.py
+            "
